@@ -1,0 +1,45 @@
+---
+name: Validate Helm Docs has been run
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      charts:
+        description: 'List of Changed Charts'
+        required: true
+        type: string
+      version:
+        description: 'Version of helm-docs to Install'
+        required: true
+        type: string
+jobs:
+  run:
+    name: helm-docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix: ${{ fromJSON(inputs.charts) }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Install helm-docs
+        run: >
+          curl -sL https://github.com/norwoodj/helm-docs/releases/download/v${{ inputs.version}}/helm-docs_${{ inputs.version}}_Linux_x86_64.tar.gz |
+          tar xz -O --strip-components=1 helm-docs > helm-docs
+
+      - name: Run helm-docs
+        run: |
+          chmod +x ./helm-docs
+          ./helm-docs -c ./charts/${{ matrix.chart }} -t .helm-docs.gotmpl
+
+      - name: Validate helm-docs didn't make any changes
+        run: |
+          if git diff --exit-code -- . ':!helm-docs'; then
+            echo "# Helm Docs Has Changed Files
+            Run helm-docs and validate its README.md changes.
+            After this is done, commit your doc update and try again." >> $GITHUB_STEP_SUMMARY
+            exit 1

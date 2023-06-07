@@ -1,0 +1,54 @@
+---
+name: Test
+
+permissions:
+  contents: read
+
+on:
+  workflow_call
+
+jobs:
+  run:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Install Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20"
+          check-latest: true
+
+      - name: Install tools
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          go install github.com/jstemmer/go-junit-report/v2@latest
+
+      - name: Go Format
+        run: gofumpt -l -w . && git diff --exit-code -- . ':(exclude).git/*' ':(exclude).github/*'
+
+      - name: Go Vet
+        run: go vet ./...
+
+      - name: Go Tidy
+        run: go mod tidy && git diff --exit-code -- . ':(exclude).git/*' ':(exclude).github/*'
+
+      - name: Go Mod
+        run: go mod download
+
+      - name: Go Mod Verify
+        run: go mod verify
+
+      - name: Go Test
+        run: go test -v -count=1 -race -shuffle=on ./... | go-junit-report -set-exit-code > report.xml
+
+      - name: Test Summary
+        if: ${{ ! cancelled() }}
+        uses: test-summary/action@v2
+        with:
+          paths: |
+            ${{ github.workspace }}/report.xml

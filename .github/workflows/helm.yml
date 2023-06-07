@@ -1,0 +1,140 @@
+---
+name: Helm test and build
+
+on:
+  workflow_call:
+    inputs:
+      unittest:
+        description: "Run helm unittest"
+        default: false
+        type: boolean
+    secrets:
+      artifactory_username:
+        description: "Username for Helm and Docker registry"
+        required: true
+      artifactory_password:
+        description: "Password for Helm and Docker registry"
+        required: true
+      jfrog_conf:
+        description: "JFrog CLI configuration file"
+        required: true
+      snyk_token:
+        description: "Snyk Authentication Token"
+        required: true
+
+
+jobs:
+  changed-charts:
+    uses: ./.github/workflows/helm-changed.yml
+
+  pluto:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 }}
+    uses: ./.github/workflows/helm-pluto.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+
+  polaris:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 }}
+    uses: ./.github/workflows/helm-polaris.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+      polaris_version: '7.4.1'
+
+  kubeconform:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 }}
+    uses: ./.github/workflows/helm-kubeconform.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+      kubernetes_version: '1.22.17'
+
+  helm-unittest:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 && inputs.unittest == 'true' }}
+    uses: ./.github/workflows/helm-unittest.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+
+  lint:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 }}
+    uses: ./.github/workflows/helm-lint.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+    secrets:
+      artifactory_username: ${{ secrets.artifactory_username }}
+      artifactory_password: ${{ secrets.artifactory_password }}
+
+  validate-helm-images:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 }}
+    uses: ./.github/workflows/helm-validate-images.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+    secrets:
+      artifactory_username: ${{ secrets.artifactory_username }}
+      artifactory_password: ${{ secrets.artifactory_password }}
+
+  snyk:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 }}
+    uses: ./.github/workflows/helm-snyk.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+    secrets:
+      snyk_token: ${{ secrets.snyk_token }}
+
+  kube-score:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 }}
+    uses: ./.github/workflows/helm-kube-score.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+      kube_score_version: 1.16.1
+
+  helm-docs:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 }}
+    uses: ./.github/workflows/helm-docs.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+      version: 1.11.0
+
+
+  status:
+    needs: changed-charts
+    if: ${{ needs.changed-charts.outputs.count > 0 }}
+    uses: ./.github/workflows/branch-status.yml
+
+  publish:
+    needs:
+      - changed-charts
+      - helm-docs
+      - helm-unittest
+      - kube-score
+      - kubeconform
+      - lint
+      - pluto
+      - polaris
+      - snyk
+      - status
+      - validate-helm-images
+    if: ${{
+          github.event.pull_request.merged == true &&
+          (
+              github.event.pull_request.base.ref == 'main' ||
+              github.event.pull_request.base.ref == 'dev' ||
+              github.event.pull_request.base.ref == 'test' ||
+              startsWith(github.event.pull_request.base.ref, 'release/')
+          ) &&
+          needs.changed-charts.outputs.count > 0
+        }}
+
+    uses: ./.github/workflows/helm-publish.yml
+    with:
+      charts: ${{ needs.changed-charts.outputs.charts }}
+      status: ${{ needs.status.outputs.status }}
+    secrets:
+      jfrog_conf: ${{ secrets.jfrog_conf }}

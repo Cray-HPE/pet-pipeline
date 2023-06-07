@@ -1,0 +1,43 @@
+---
+name: kube-score
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      charts:
+        description: 'List of Changed Charts'
+        required: true
+        type: string
+      kube_score_version:
+        description: 'Version of Kube Score to Install'
+        required: true
+        type: string
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    name: kube-score
+    timeout-minutes: 5
+    strategy:
+      matrix: ${{ fromJSON(inputs.charts) }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Install kube-score
+        run: >
+          curl -sL https://github.com/zegl/kube-score/releases/download/v${{ inputs.kube_score_version }}/kube-score_${{ inputs.kube_score_version }}_linux_amd64 -o kube-score
+
+      - name: Run kube-score
+        run: |
+          set -o pipefail
+          chmod +x ./kube-score
+          helm template "./charts/${{ matrix.chart }}" | \
+          ./kube-score score --ignore-container-cpu-limit - | tee .kube-score.output
+
+      - name: Add Step Summary
+        if: ${{ ! cancelled() }}
+        run: |
+          echo -e '```text\n'"$(cat .kube-score.output)"'\n```' >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,40 @@
+---
+name: Snyk
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      charts:
+        description: 'List of Changed Charts'
+        required: true
+        type: string
+    secrets:
+      snyk_token:
+        description: 'Snyk Token used for Scanning'
+        required: true
+
+jobs:
+  run:
+    name: Snyk
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix: ${{ fromJSON(inputs.charts) }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Generate Kubernetes Yaml from Helm Chart
+        run: |
+          helm template ./charts/${{ matrix.chart }} > snyk-iac-${{ matrix.chart }}.yaml
+
+      - name: Run Snyk to check Kubernetes manifest file for issues
+        uses: snyk/actions/iac@master
+        env:
+          SNYK_TOKEN: ${{ secrets.snyk_token }}
+        with:
+          file: snyk-iac-${{ matrix.chart }}.yaml
+          args: ">> $GITHUB_STEP_SUMMARY"

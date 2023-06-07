@@ -1,0 +1,82 @@
+---
+name: Validate Helm Images
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      charts:
+        description: List of Changed Charts
+        required: true
+        type: string
+      artifactory_hostname:
+        description: Docker registry name to pre-auhtenticate to pull chart images
+        type: string
+        default: artifactory.algol60.net
+      helm_version:
+        description: 'Version of Helm to Intall'
+        required: false
+        type: string
+        default: 'v3.11.3'
+    secrets:
+      artifactory_username:
+        description: Username for Helm repository and Docker registry
+        required: true
+      artifactory_password:
+        description: Password for Helm repository and Docker registry
+        required: true
+jobs:
+  run:
+    name: Validate Helm Images Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix: ${{ fromJSON(inputs.charts) }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Login to Artifactory Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ inputs.artifactory_hostname }}
+          username: ${{ secrets.artifactory_username }}
+          password: ${{ secrets.artifactory_password }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ inputs.helm_version }}
+
+      - name: Get List of Images in Chart.yaml
+        run: |
+          yq '.annotations["artifacthub.io/images"]' ./charts/${{ matrix.chart }}/Chart.yaml | \
+          yq '.[].image' | sort -u > ".${{ matrix.chart }}-chart.yaml"
+
+      - name: Get List of Images From helm template
+        run: |
+          helm template ./charts/tpm-provisioner | yq '..|.image? | select(.)' | \
+          sort -u > ".${{ matrix.chart }}-helm-template"
+
+      - name: Validate Chart refrences the same images that are in the helm template
+        run: |
+          set -o pipefail
+          if ! diff --brief ".${{ matrix.chart }}-helm-template" ".${{ matrix.chart }}-chart.yaml"; then
+            echo "Images referenced in Chart.yaml do not match the ones found in the helm chart" >> $GITHUB_STEP_SUMMARY
+            diff -u ".${{ matrix.chart }}-helm-template" ".${{ matrix.chart }}-chart.yaml" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Validate Images are Available
+        run: |
+          set -o pipefail
+          failure=0
+          for image in $(cat ".${{ matrix.chart }}-chart.yaml") ; do
+            if ! docker manifest inspect "$image"; then
+               failure=1
+               echo "Missing Image: $image" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          exit $failure

@@ -1,0 +1,59 @@
+---
+name: kubeconform
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      charts:
+        description: 'List of Changed Charts'
+        required: true
+        type: string
+      kubernetes_version:
+        description: 'Kubernetes Version to test against'
+        required: false
+        type: string
+      helm_version:
+        description: 'Version of Helm to Intall'
+        required: false
+        type: string
+        default: 'v3.11.3'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    name: kubeconform
+    timeout-minutes: 5
+    strategy:
+      matrix: ${{ fromJSON(inputs.charts) }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Install Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20"
+          check-latest: true
+
+      - name: Unstall kubeconform
+        run: go install github.com/yannh/kubeconform/cmd/kubeconform@latest
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ inputs.helm_version }}
+
+      - name: Run KubeConform
+        run: >
+          helm template ./charts/${{ matrix.chart }} |
+          kubeconform -ignore-missing-schemas -kubernetes-version ${{ inputs.kubernetes_version }}
+          -output junit > ${{ github.workspace }}/kubeconform-report.xml
+
+      - name: Test Summary
+        if: ${{ ! cancelled() }}
+        uses: test-summary/action@v2
+        with:
+          paths: |
+            ${{ github.workspace }}/kubeconform-report.xml

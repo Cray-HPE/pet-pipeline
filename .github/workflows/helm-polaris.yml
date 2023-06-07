@@ -1,0 +1,44 @@
+---
+name: Polaris Policy Engine
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      charts:
+        description: 'List of Changed Charts'
+        required: true
+        type: string
+      polaris_version:
+        description: 'Version of Polaris to Install'
+        required: true
+        type: string
+jobs:
+  run:
+    name: Polaris
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix: ${{ fromJSON(inputs.charts) }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Setup Polaris
+        uses: fairwindsops/polaris/.github/actions/setup-polaris@master
+        with:
+          version: ${{ inputs.polaris_version }}
+
+      - name: Run Polaris
+        run: |
+          set -o pipefail
+          polaris audit --helm-chart ./charts/${{ matrix.chart }} -f pretty -c .github/polaris.yaml \
+          --only-show-failed-tests --set-exit-code-on-danger  --color=false | tee .polaris.output
+
+      - name: Add Step Summary
+        if: ${{ ! cancelled() }}
+        run: >
+          sed -E "s/\x1B\[[0-9;]*[a-zA-Z]//g; s/^([[:space:]]*)([^[:space:]]+)/\1- \2/g"
+          .polaris.output >> $GITHUB_STEP_SUMMARY
