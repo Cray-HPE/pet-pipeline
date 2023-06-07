@@ -1,0 +1,29 @@
+---
+name: Kubernetes Deprecation Check
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      charts:
+        description: 'List of Changed Charts'
+        required: true
+        type: string
+jobs:
+  run:
+    name: Pluto
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix: ${{ fromJSON(inputs.charts) }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Download Pluto
+        uses: FairwindsOps/pluto/github-action@master
+      - name: Pluto
+        run: |
+          set -o pipefail
+          helm template "./charts/${{ matrix.chart }}" | pluto detect -

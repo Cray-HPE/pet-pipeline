@@ -1,0 +1,16 @@
+---
+name: Test and Build (helm)
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  go:
+    name: CSM PET Workflow Reusable Helm Workflow
+    uses: Cray-HPE/pet-pipeline/.github/workflows/helm.yml@main
+    with:
+      unittest: false
+    secrets:
+      artifactory_password: ${{ secrets.ARTIFACTORY_ALGOL60_TOKEN }}
+      artifactory_username: ${{ secrets.ARTIFACTORY_ALGOL60_USERNAME }}
+      jfrog_conf: ${{ secrets.ARTIFACTORY_ALGOL60_JFROG_CLI_CONFIGURATION }}
+      snyk_token: ${{ secrets.SNYK_TOKEN }}

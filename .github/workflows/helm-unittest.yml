@@ -1,0 +1,53 @@
+---
+name: Chart Testing
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      charts:
+        description: List of Changed Charts
+        required: true
+        type: string
+      helm_version:
+        description: 'Version of Helm to Intall'
+        required: false
+        type: string
+        default: 'v3.11.3'
+
+jobs:
+  run:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix: ${{ fromJSON(inputs.charts) }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ inputs.helm_version }}
+
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git
+
+      - name: Run Helm Unittest
+        run: |
+          helm unittest --color -t Junit -o report.xml ./charts/${{ matrix.chart }}
+          if [ "$(wc -l < report.xml)" -eq 1 ] && grep -q "^<testsuites></testsuites>$" report.xml; then
+            echo "# ${{ matrix.chart }}" >> $GITHUB_STEP_SUMMARY
+            echo "Error: Chart does not contain any unit tests" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Test Summary
+        if: ${{ ! cancelled() }}
+        uses: test-summary/action@v2
+        with:
+          paths: |
+            ${{ github.workspace }}/report.xml
