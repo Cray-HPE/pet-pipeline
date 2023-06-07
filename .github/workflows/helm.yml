@@ -64,8 +64,8 @@ jobs:
     with:
       charts: ${{ needs.changed-charts.outputs.charts }}
     secrets:
-      artifactory_username: ${{ inputs.artifactory_username }}
-      artifactory_password: ${{ inputs.artifactory_password }}
+      artifactory_username: ${{ secrets.artifactory_username }}
+      artifactory_password: ${{ secrets.artifactory_password }}
 
   validate-helm-images:
     needs: changed-charts
@@ -74,8 +74,8 @@ jobs:
     with:
       charts: ${{ needs.changed-charts.outputs.charts }}
     secrets:
-      artifactory_username: ${{ inputs.artifactory_username }}
-      artifactory_password: ${{ inputs.artifactory_password }}
+      artifactory_username: ${{ secrets.artifactory_username }}
+      artifactory_password: ${{ secrets.artifactory_password }}
 
   snyk:
     needs: changed-charts
@@ -84,7 +84,7 @@ jobs:
     with:
       charts: ${{ needs.changed-charts.outputs.charts }}
     secrets:
-      snyk_token: ${{ inputs.snyk_token }}
+      snyk_token: ${{ secrets.snyk_token }}
 
   kube-score:
     needs: changed-charts
@@ -137,4 +137,4 @@ jobs:
       charts: ${{ needs.changed-charts.outputs.charts }}
       status: ${{ needs.status.outputs.status }}
     secrets:
-      jfrog_conf: ${{ inputs.jfrog_conf }}
+      jfrog_conf: ${{ secrets.jfrog_conf }}
