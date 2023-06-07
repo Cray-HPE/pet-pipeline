@@ -1,0 +1,27 @@
+---
+name: Scanner - Snyk
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    secrets:
+      snyk_token:
+        description: 'Snyk Token used for Scanning'
+        required: true
+
+jobs:
+  run:
+    name: Snyk
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Run Snyk to check Kubernetes manifest file for issues
+        uses: snyk/actions/golang@master
+        env:
+          SNYK_TOKEN: ${{ secrets.snyk_token }}
+          args: ">> $GITHUB_STEP_SUMMARY"
